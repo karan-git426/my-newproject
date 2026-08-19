@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RVM STORE Billing & Inventory System</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, -apple-system, sans-serif; margin: 0; padding: 0; }
+        body { background-color: #f0f2f5; color: #1c1e21; padding: 15px; }
+        .app-header { text-align: center; background: #1a73e8; color: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .app-header h1 { font-size: 22px; margin-bottom: 4px; }
+        .app-header p { font-size: 13px; opacity: 0.9; }
+
+        .nav-tabs { display: flex; gap: 10px; margin-bottom: 15px; }
+        .tab-btn { flex: 1; padding: 12px; border: none; background: #e4e6eb; color: #4b4f56; font-weight: bold; font-size: 14px; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .tab-btn.active { background: #1a73e8; color: white; }
+
+        .tab-content { display: none; background: white; padding: 18px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .tab-content.active { display: block; }
+
+        .form-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+        .form-row input, .form-row select { padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px; font-size: 14px; flex: 1; min-width: 120px; }
+        .btn { padding: 8px 14px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .btn-primary { background: #1a73e8; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ff9800; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #e4e6eb; padding: 10px; text-align: center; font-size: 13px; }
+        th { background-color: #f5f6f7; color: #4b4f56; }
+
+        .bill-summary { margin-top: 15px; font-size: 16px; font-weight: bold; text-align: right; }
+        .total-amount { font-size: 22px; color: #28a745; }
+
+        .badge-low { background: #fff3cd; color: #856404; padding: 3px 6px; border-radius: 4px; font-size: 11px; }
+        .badge-exp { background: #f8d7da; color: #721c24; padding: 3px 6px; border-radius: 4px; font-size: 11px; }
+        
+        .badge-in { background: #e7f3ff; color: #1a73e8; padding: 4px 8px; border-radius: 6px; font-weight: bold; }
+        .badge-sold { background: #fff0f0; color: #d93025; padding: 4px 8px; border-radius: 6px; font-weight: bold; }
+        .badge-bal { background: #e6f4ea; color: #137333; padding: 4px 8px; border-radius: 6px; font-weight: bold; }
+
+        /* Search input highlight */
+        .search-box { border: 2px solid #1a73e8 !important; background-color: #f7fafe; }
+
+        @media print {
+            body * { visibility: hidden; }
+            #printableReceipt, #printableReceipt * { visibility: visible; }
+            #printableReceipt { position: absolute; left: 0; top: 0; width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-header no-print">
+    <h1>🛒 RVM STORE Management & Billing System</h1>
+    <p>Stock Tracking | Business Billing | Invoice Print</p>
+</div>
+
+<div class="nav-tabs no-print">
+    <button class="tab-btn active" onclick="switchTab('billing')">🧾 New Bill (விற்பனை)</button>
+    <button class="tab-btn" onclick="switchTab('history')">📜 Sales History (வரலாறு)</button>
+    <button class="tab-btn" onclick="switchTab('inventory')">📦 Inventory (இருப்பு)</button>
+</div>
+
+<!-- ================= BILLING TAB ================= -->
+<div id="billing" class="tab-content active">
+    <h3>🧾 Customer Bill Generation</h3>
+    <div style="margin-top: 10px;" class="form-row">
+        <input type="text" id="custName" placeholder="Customer Name (விருப்பப்பட்டால்)">
+        <input type="text" id="custPhone" placeholder="Mobile Number">
+    </div>
+
+    <div style="background: #f0f7ff; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+        <p style="font-weight: bold; font-size: 13px; margin-bottom: 8px; color: #1a73e8;">Add Item to Bill:</p>
+        
+        <!-- SEARCH BOX FOR BILLING -->
+        <div class="form-row">
+            <input type="text" id="billSearch" class="search-box" placeholder="🔍 Type Item Name to Search..." oninput="filterBillDropdown()">
+            <select id="billItemSelect" onchange="autoFillPrice()">
+                <option value="">-- Select Item --</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <input type="number" id="billQty" placeholder="Qty" min="0.1" step="any">
+            <input type="number" id="billRate" placeholder="Price / Rate">
+            <button class="btn btn-primary" onclick="addToBill()">+ Add Item</button>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>S.No</th>
+                <th>Item Name</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>Total</th>
+                <th class="no-print">Action</th>
+            </tr>
+        </thead>
+        <tbody id="billTableBody">
+            <tr><td colspan="6" style="color:#888;">No items added yet.</td></tr>
+        </tbody>
+    </table>
+
+    <div class="bill-summary">
+        Total Amount: <span class="total-amount"><span id="grandTotal">0.00</span></span>
+    </div>
+
+    <div style="margin-top: 20px; display: flex; gap: 10px;" class="no-print">
+        <button class="btn btn-success" style="flex: 1; padding: 14px;" onclick="completeBill(true)">🖨️ Save & Print Bill</button>
+        <button class="btn btn-warning" style="flex: 1; padding: 14px;" onclick="completeBill(false)">✅ Save Bill Only (No Print)</button>
+        <button class="btn btn-danger" onclick="resetBill()">Clear Bill</button>
+    </div>
+</div>
+
+<!-- ================= SALES HISTORY TAB ================= -->
+<div id="history" class="tab-content">
+    <h3>📜 Saved Bills & Sales History</h3>
+    <table style="margin-top: 15px;">
+        <thead>
+            <tr>
+                <th>Bill ID</th>
+                <th>Date & Time</th>
+                <th>Customer Name</th>
+                <th>Items Count</th>
+                <th>Total Amount</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="historyTableBody">
+            <!-- Saved bills will be displayed here -->
+        </tbody>
+    </table>
+</div>
+
+<!-- ================= INVENTORY TAB ================= -->
+<div id="inventory" class="tab-content">
+    <h3>📦 Add Stock & Price Details</h3>
+    <div style="margin-top: 10px;" class="form-row">
+        <input type="text" id="itemName" placeholder="Item Name (eg: Rice)">
+        <input type="number" id="itemQty" placeholder="Qty Stock">
+        <select id="itemUnit">
+            <option value="Pcs">Pcs</option>
+            <option value="Kg">Kg</option>
+            <option value="Pkt">Pkt</option>
+            <option value="Ltr">Ltr</option>
+        </select>
+        <input type="number" id="itemPrice" placeholder="Selling Price / Rate">
+        <input type="date" id="mfgDate" title="MFG Date">
+        <input type="date" id="expDate" title="EXP Date">
+        <button class="btn btn-success" onclick="addStockItem()">+ Save Item</button>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top:20px; flex-wrap: wrap; gap: 10px;">
+        <h3>📋 Inventory Summary</h3>
+        <!-- INVENTORY SEARCH BOX -->
+        <input type="text" id="invSearch" class="search-box" style="max-width: 250px;" placeholder="🔍 Search Inventory..." oninput="renderStockTable()">
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Total In</th>
+                <th>Sold Qty</th>
+                <th>Balance Available</th>
+                <th>Selling Price</th>
+                <th>MFG / EXP</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="stockTableBody">
+            <!-- Stock items -->
+        </tbody>
+    </table>
+</div>
+
+<!-- HIDDEN PRINT RECEIPT CONTAINER -->
+<div id="printableReceipt" style="display: none; padding: 20px; font-family: monospace;">
+    <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px;">
+        <h2 style="margin-bottom: 5px;">KADAI NAME</h2>
+        <p>Cash Receipt / Tax Invoice</p>
+        <p id="printBillDate"></p>
+        <p id="printCustInfo"></p>
+    </div>
+    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+        <thead>
+            <tr style="border-bottom: 1px solid #000;">
+                <th style="text-align: left;">Item</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th style="text-align: right;">Total</th>
+            </tr>
+        </thead>
+        <tbody id="printReceiptItems"></tbody>
+    </table>
+    <div style="border-top: 1px dashed #000; margin-top: 10px; padding-top: 10px; text-align: right;">
+        <h3>GRAND TOTAL: <span id="printGrandTotal"></span></h3>
+    </div>
+    <div style="text-align: center; margin-top: 20px; font-size: 11px;">
+        <p>Thank you for shopping with us!</p>
+        <p>*** Visit Again ***</p>
+    </div>
+</div>
+
+<script>
+    let stockList = JSON.parse(localStorage.getItem('kadai_master_stock')) || [];
+    let salesHistory = JSON.parse(localStorage.getItem('kadai_sales_history')) || [];
+    let currentBill = [];
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        
+        if(tabId === 'billing') {
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            document.getElementById('billing').classList.add('active');
+            updateBillDropdown();
+        } else if(tabId === 'history') {
+            document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            document.getElementById('history').classList.add('active');
+            renderHistoryTable();
+        } else {
+            document.querySelectorAll('.tab-btn')[2].classList.add('active');
+            document.getElementById('inventory').classList.add('active');
+            renderStockTable();
+        }
+    }
+
+    // --- INVENTORY FUNCTIONS ---
+    function addStockItem() {
+        const name = document.getElementById('itemName').value.trim();
+        const qty = parseFloat(document.getElementById('itemQty').value);
+        const unit = document.getElementById('itemUnit').value;
+        const price = parseFloat(document.getElementById('itemPrice').value);
+        const mfg = document.getElementById('mfgDate').value || 'N/A';
+        const exp = document.getElementById('expDate').value || 'N/A';
+
+        if (!name || isNaN(qty) || isNaN(price)) {
+            alert('Please enter Item Name, Quantity, and Selling Price!');
+            return;
+        }
+
+        const existingIndex = stockList.findIndex(i => i.name.toLowerCase() === name.toLowerCase());
+        if (existingIndex > -1) {
+            stockList[existingIndex].totalIn += qty;
+            stockList[existingIndex].price = price;
+            stockList[existingIndex].mfg = mfg;
+            stockList[existingIndex].exp = exp;
+        } else {
+            stockList.push({ 
+                id: Date.now(), 
+                name, 
+                totalIn: qty, 
+                soldQty: 0, 
+                unit, 
+                price, 
+                mfg, 
+                exp 
+            });
+        }
+
+        localStorage.setItem('kadai_master_stock', JSON.stringify(stockList));
+        
+        document.getElementById('itemName').value = '';
+        document.getElementById('itemQty').value = '';
+        document.getElementById('itemPrice').value = '';
+        document.getElementById('mfgDate').value = '';
+        document.getElementById('expDate').value = '';
+
+        renderStockTable();
+        alert('Stock item saved successfully!');
+    }
+
+    function renderStockTable() {
+        const tbody = document.getElementById('stockTableBody');
+        const query = (document.getElementById('invSearch') ? document.getElementById('invSearch').value : '').toLowerCase();
+        tbody.innerHTML = '';
+        const today = new Date().toISOString().split('T')[0];
+
+        const filteredList = stockList.filter(item => item.name.toLowerCase().includes(query));
+
+        if (filteredList.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7">No matching items found.</td></tr>';
+            return;
+        }
+
+        filteredList.forEach(item => {
+            const balance = item.totalIn - (item.soldQty || 0);
+            const isExp = item.exp !== 'N/A' && item.exp < today;
+            const isLow = balance <= 5;
+            const tr = document.createElement('tr');
+
+            tr.innerHTML = `
+                <td style="text-align: left;">
+                    <strong>${item.name}</strong>
+                    ${isExp ? '<br><span class="badge-exp">Expired</span>' : ''}
+                    ${isLow && !isExp ? '<br><span class="badge-low">Low Stock</span>' : ''}
+                </td>
+                <td><span class="badge-in">${item.totalIn} ${item.unit}</span></td>
+                <td><span class="badge-sold">${item.soldQty || 0} ${item.unit}</span></td>
+                <td><span class="badge-bal">${balance} ${item.unit}</span></td>
+                <td>${item.price.toFixed(2)}</td>
+                <td><small>MFG: ${item.mfg}<br>EXP: ${item.exp}</small></td>
+                <td><button class="btn btn-danger" onclick="deleteStock(${item.id})">🗑️</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function deleteStock(id) {
+        if (confirm('Delete this item from inventory?')) {
+            stockList = stockList.filter(i => i.id !== id);
+            localStorage.setItem('kadai_master_stock', JSON.stringify(stockList));
+            renderStockTable();
+        }
+    }
+
+    // --- BILLING SEARCH & DROPDOWN ---
+    function updateBillDropdown() {
+        filterBillDropdown();
+    }
+
+    function filterBillDropdown() {
+        const select = document.getElementById('billItemSelect');
+        const query = (document.getElementById('billSearch').value || '').toLowerCase();
+        select.innerHTML = '<option value="">-- Select Item --</option>';
+        
+        stockList.forEach(item => {
+            const balance = item.totalIn - (item.soldQty || 0);
+            const matches = item.name.toLowerCase().includes(query);
+            if (balance > 0 && matches) {
+                select.innerHTML += `<option value="${item.id}">${item.name} (${balance} ${item.unit} left) - ${item.price}</option>`;
+            }
+        });
+    }
+
+    function autoFillPrice() {
+        const selectedId = document.getElementById('billItemSelect').value;
+        const item = stockList.find(i => i.id == selectedId);
+        if (item) {
+            document.getElementById('billRate').value = item.price;
+        }
+    }
+
+    function addToBill() {
+        const selectedId = document.getElementById('billItemSelect').value;
+        const qty = parseFloat(document.getElementById('billQty').value);
+        const rate = parseFloat(document.getElementById('billRate').value);
+
+        if (!selectedId || isNaN(qty) || qty <= 0 || isNaN(rate)) {
+            alert('Select an item and enter valid quantity and rate!');
+            return;
+        }
+
+        const item = stockList.find(i => i.id == selectedId);
+        const balance = item.totalIn - (item.soldQty || 0);
+
+        if (qty > balance) {
+            alert(`Stock Shortage! Available stock for ${item.name} is only ${balance} ${item.unit}`);
+            return;
+        }
+
+        const total = qty * rate;
+        currentBill.push({
+            stockId: item.id,
+            name: item.name,
+            qty: qty,
+            unit: item.unit,
+            rate: rate,
+            total: total
+        });
+
+        document.getElementById('billItemSelect').value = '';
+        document.getElementById('billSearch').value = '';
+        document.getElementById('billQty').value = '';
+        document.getElementById('billRate').value = '';
+        filterBillDropdown();
+
+        renderBillTable();
+    }
+
+    function renderBillTable() {
+        const tbody = document.getElementById('billTableBody');
+        tbody.innerHTML = '';
+        let gTotal = 0;
+
+        if (currentBill.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="color:#888;">No items added yet.</td></tr>';
+            document.getElementById('grandTotal').innerText = '0.00';
+            return;
+        }
+
+        currentBill.forEach((item, idx) => {
+            gTotal += item.total;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${idx + 1}</td>
+                <td style="text-align: left;"><strong>${item.name}</strong></td>
+                <td>${item.qty} ${item.unit}</td>
+                <td>${item.rate.toFixed(2)}</td>
+                <td>${item.total.toFixed(2)}</td>
+                <td class="no-print"><button class="btn btn-danger" onclick="removeFromBill(${idx})">❌</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('grandTotal').innerText = gTotal.toFixed(2);
+    }
+
+    function removeFromBill(index) {
+        currentBill.splice(index, 1);
+        renderBillTable();
+    }
+
+    function resetBill() {
+        if (currentBill.length > 0 && confirm('Clear current bill items?')) {
+            currentBill = [];
+            renderBillTable();
+        }
+    }
+
+    function completeBill(shouldPrint) {
+        if (currentBill.length === 0) {
+            alert('Bill is empty! Add items first.');
+            return;
+        }
+
+        const custName = document.getElementById('custName').value.trim() || 'Valued Customer';
+        const custPhone = document.getElementById('custPhone').value.trim() || 'N/A';
+        const billDate = new Date().toLocaleString();
+        let totalAmt = 0;
+
+        currentBill.forEach(bItem => {
+            totalAmt += bItem.total;
+            const sItem = stockList.find(s => s.id === bItem.stockId);
+            if (sItem) {
+                sItem.soldQty = (sItem.soldQty || 0) + bItem.qty;
+            }
+        });
+
+        const billRecord = {
+            billId: 'BILL-' + Math.floor(1000 + Math.random() * 9000),
+            date: billDate,
+            custName: custName,
+            custPhone: custPhone,
+            items: [...currentBill],
+            totalAmount: totalAmt
+        };
+
+        salesHistory.unshift(billRecord);
+
+        localStorage.setItem('kadai_master_stock', JSON.stringify(stockList));
+        localStorage.setItem('kadai_sales_history', JSON.stringify(salesHistory));
+
+        if (shouldPrint) {
+            printReceiptData(billRecord);
+        }
+
+        currentBill = [];
+        document.getElementById('custName').value = '';
+        document.getElementById('custPhone').value = '';
+        renderBillTable();
+        updateBillDropdown();
+        alert('Bill processed successfully!');
+    }
+
+    // --- SALES HISTORY FUNCTIONS ---
+    function renderHistoryTable() {
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = '';
+
+        if (salesHistory.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="color:#888;">No saved bill history available.</td></tr>';
+            return;
+        }
+
+        salesHistory.forEach((bill, idx) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${bill.billId}</strong></td>
+                <td><small>${bill.date}</small></td>
+                <td>${bill.custName} ${bill.custPhone !== 'N/A' ? '<br><small>('+bill.custPhone+')</small>' : ''}</td>
+                <td>${bill.items.length} items</td>
+                <td><strong style="color:#28a745;">${bill.totalAmount.toFixed(2)}</strong></td>
+                <td>
+                    <button class="btn btn-primary" style="padding: 4px 8px; font-size:11px;" onclick="viewAndPrintBill(${idx})">🖨️ Print</button>
+                    <button class="btn btn-danger" style="padding: 4px 8px; font-size:11px;" onclick="deleteBillHistory(${idx})">🗑️</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function viewAndPrintBill(index) {
+        const bill = salesHistory[index];
+        printReceiptData(bill);
+    }
+
+    function printReceiptData(bill) {
+        document.getElementById('printBillDate').innerText = `Date: ${bill.date} | ${bill.billId}`;
+        document.getElementById('printCustInfo').innerText = `Customer: ${bill.custName} ${bill.custPhone !== 'N/A' ? '| Mobile: ' + bill.custPhone : ''}`;
+
+        const receiptBody = document.getElementById('printReceiptItems');
+        receiptBody.innerHTML = '';
+
+        bill.items.forEach(item => {
+            receiptBody.innerHTML += `
+                <tr>
+                    <td style="text-align: left; padding: 4px 0;">${item.name}</td>
+                    <td style="text-align: center;">${item.qty} ${item.unit}</td>
+                    <td style="text-align: center;">${item.rate.toFixed(2)}</td>
+                    <td style="text-align: right;">${item.total.toFixed(2)}</td>
+                </tr>
+            `;
+        });
+
+        document.getElementById('printGrandTotal').innerText = bill.totalAmount.toFixed(2);
+
+        const printContainer = document.getElementById('printableReceipt');
+        printContainer.style.display = 'block';
+        window.print();
+        printContainer.style.display = 'none';
+    }
+
+    function deleteBillHistory(index) {
+        if (confirm('Delete this bill? Stock will be added back to inventory.')) {
+            const bill = salesHistory[index];
+            
+            bill.items.forEach(bItem => {
+                const sItem = stockList.find(s => s.id === bItem.stockId);
+                if (sItem) {
+                    sItem.soldQty = Math.max(0, (sItem.soldQty || 0) - bItem.qty);
+                }
+            });
+
+            salesHistory.splice(index, 1);
+            localStorage.setItem('kadai_master_stock', JSON.stringify(stockList));
+            localStorage.setItem('kadai_sales_history', JSON.stringify(salesHistory));
+            
+            renderHistoryTable();
+            alert('Bill deleted and stock reverted back successfully!');
+        }
+    }
+
+    // Init
+    updateBillDropdown();
+</script>
+
+</body>
+</html>
